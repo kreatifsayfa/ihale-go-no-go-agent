@@ -16,7 +16,9 @@ import os
 import time
 from typing import Any
 
-from strands import Agent, tool
+import logging
+
+from strands import Agent, ModelRetryStrategy, tool
 from strands.models import BedrockModel
 
 from decider_client import Decider
@@ -25,6 +27,7 @@ from samples.data import COMPANY_PROFILE
 
 MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0")
 REGION = os.environ.get("AWS_REGION", "us-east-1")
+log = logging.getLogger("gonogo")
 
 SYSTEM_PROMPT = """You are a bid assistant for a Turkish construction company.
 You receive a public tender notice in Turkish. Work in this order:
@@ -100,6 +103,8 @@ def build_agent(outcome: Outcome, decider: Decider | None = None) -> tuple[Agent
         interventions=[gate],
         system_prompt=SYSTEM_PROMPT + "\n\nCompany profile:\n" + json.dumps(COMPANY_PROFILE, ensure_ascii=False),
         callback_handler=None,
+        # fail fast in the demo instead of backing off for minutes on throttling
+        retry_strategy=ModelRetryStrategy(max_attempts=3, initial_delay=2, max_delay=8),
     )
     return agent, gate
 
@@ -108,7 +113,9 @@ def run(notice_tr: str) -> dict[str, Any]:
     outcome = Outcome()
     agent, gate = build_agent(outcome)
     started = time.perf_counter()
+    log.warning("run start model=%s", MODEL_ID)
     result = agent(f"Tender notice:\n{notice_tr}")
+    log.warning("run done in %.1fs, decisions=%d", time.perf_counter() - started, len(gate.decisions))
     return {
         "summary": str(result).strip(),
         "events": outcome.events,

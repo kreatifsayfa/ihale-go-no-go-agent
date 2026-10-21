@@ -53,6 +53,27 @@ def health() -> dict:
         return {"ok": False, "error": str(exc)}
 
 
+@app.get("/api/llmcheck")
+def llmcheck(request: Request) -> dict:
+    """One Bedrock call without retries, to see the real provider error."""
+    import boto3
+    from botocore.config import Config
+
+    from agent import MODEL_ID, REGION
+
+    _rate_limit(request.headers.get("cf-connecting-ip") or request.client.host)
+    client = boto3.client("bedrock-runtime", region_name=REGION,
+                          config=Config(retries={"max_attempts": 1}, read_timeout=30, connect_timeout=10))
+    started = time.perf_counter()
+    try:
+        r = client.converse(modelId=MODEL_ID, messages=[{"role": "user", "content": [{"text": "Say ok."}]}],
+                            inferenceConfig={"maxTokens": 5})
+        return {"ok": True, "model": MODEL_ID, "ms": round((time.perf_counter() - started) * 1000),
+                "text": r["output"]["message"]["content"][0]["text"]}
+    except Exception as exc:
+        return {"ok": False, "model": MODEL_ID, "error": f"{type(exc).__name__}: {exc}"[:500]}
+
+
 @app.post("/api/run")
 def run_agent(req: RunRequest, request: Request) -> dict:
     if len(req.notice_tr) > 6000:
