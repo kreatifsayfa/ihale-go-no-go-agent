@@ -54,24 +54,27 @@ def health() -> dict:
 
 
 @app.get("/api/llmcheck")
-def llmcheck(request: Request) -> dict:
+def llmcheck(request: Request, model: str | None = None) -> dict:
     """One Bedrock call without retries, to see the real provider error."""
     import boto3
     from botocore.config import Config
 
     from agent import MODEL_ID, REGION
 
+    allowed = {MODEL_ID, "global.anthropic.claude-haiku-5-5", "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+               "us.amazon.nova-lite-v1:0", "us.amazon.nova-pro-v1:0", "us.amazon.nova-2-lite-v1:0"}
+    model_id = model if model in allowed else MODEL_ID
     _rate_limit(request.headers.get("cf-connecting-ip") or request.client.host)
     client = boto3.client("bedrock-runtime", region_name=REGION,
                           config=Config(retries={"max_attempts": 1}, read_timeout=30, connect_timeout=10))
     started = time.perf_counter()
     try:
-        r = client.converse(modelId=MODEL_ID, messages=[{"role": "user", "content": [{"text": "Say ok."}]}],
+        r = client.converse(modelId=model_id, messages=[{"role": "user", "content": [{"text": "Say ok."}]}],
                             inferenceConfig={"maxTokens": 5})
-        return {"ok": True, "model": MODEL_ID, "ms": round((time.perf_counter() - started) * 1000),
+        return {"ok": True, "model": model_id, "ms": round((time.perf_counter() - started) * 1000),
                 "text": r["output"]["message"]["content"][0]["text"]}
     except Exception as exc:
-        return {"ok": False, "model": MODEL_ID, "error": f"{type(exc).__name__}: {exc}"[:500]}
+        return {"ok": False, "model": model_id, "error": f"{type(exc).__name__}: {exc}"[:500]}
 
 
 @app.post("/api/run")
