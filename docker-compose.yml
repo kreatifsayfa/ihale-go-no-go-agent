@@ -1,0 +1,24 @@
+services:
+  decider:
+    build: ./decider
+    restart: unless-stopped
+    volumes:
+      - hf-cache:/models
+    mem_limit: 9g
+    expose:
+      - "8099"
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      STRANDS_DECIDER_URL: http://decider:8099
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-us.anthropic.claude-haiku-4-5-20251001-v1:0}
+      AWS_BEARER_TOKEN_BEDROCK: ${AWS_BEARER_TOKEN_BEDROCK}
+      RATE_PER_HOUR: ${RATE_PER_HOUR:-20}
+    depends_on:
+      - decider
+    expose:
+      - "8000"
+volumes:
+  hf-cache:
