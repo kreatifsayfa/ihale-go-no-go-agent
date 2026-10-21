@@ -62,5 +62,9 @@ def run_agent(req: RunRequest, request: Request) -> dict:
         raise HTTPException(503, "Busy, try again in a minute.")
     try:
         return run(req.notice_tr)
+    except DeciderUnavailable as exc:
+        raise HTTPException(503, f"Decider unavailable: {exc}") from exc
+    except Exception as exc:  # surface model/provider errors to the demo UI
+        raise HTTPException(502, f"{type(exc).__name__}: {exc}"[:400]) from exc
     finally:
         _lock.release()
